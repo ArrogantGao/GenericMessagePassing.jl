@@ -1,13 +1,28 @@
 name = "GenericMessagePassing"
 uuid = "09522ef3-fe1e-4698-a056-61d75781c616"
-authors = ["Xuanzhao Gao <gaoxuanzhao@gmail.com> and contributors"]
+authors = ["Xuanzhao Gao <xz.gao@connect.ust.hk> and Yi-Jia Wang"]
 version = "1.0.0-DEV"
 
+[deps]
+GenericTensorNetworks = "3521c873-ad32-4bb4-b63d-f4f178f42b49"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+OMEinsum = "ebe7aa44-baf0-506c-a96f-8464559b3922"
+OMEinsumContractionOrders = "6f22d1fd-8eed-4bb7-9776-e7d684900715"
+ProblemReductions = "899c297d-f7d2-4ebf-8815-a35996def416"
+
 [compat]
-julia = "1.6.7"
+GenericTensorNetworks = "4.0.1"
+Graphs = "1.12.1"
+OMEinsum = "0.8.5"
+OMEinsumContractionOrders = "0.9.8"
+ProblemReductions = "0.3.3"
+julia = "1.11"
 
 [extras]
+TensorInference = "c2297e78-99bd-40ad-871d-f50e56b81012"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
 
 [targets]
-test = ["Test"]
+test = ["Test", "TensorInference", "Random"]
