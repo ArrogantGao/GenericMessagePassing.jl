@@ -3,6 +3,7 @@ module GenericMessagePassing
 using Graphs
 using ProblemReductions, GenericTensorNetworks
 using OMEinsum, OMEinsumContractionOrders
+using TensorInference
 
 export BPConfig
 export bp, message2marginals

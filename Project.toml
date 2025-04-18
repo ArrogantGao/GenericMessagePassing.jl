@@ -9,6 +9,7 @@ Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 OMEinsum = "ebe7aa44-baf0-506c-a96f-8464559b3922"
 OMEinsumContractionOrders = "6f22d1fd-8eed-4bb7-9776-e7d684900715"
 ProblemReductions = "899c297d-f7d2-4ebf-8815-a35996def416"
+TensorInference = "c2297e78-99bd-40ad-871d-f50e56b81012"
 
 [compat]
 GenericTensorNetworks = "4.0.1"
@@ -16,13 +17,13 @@ Graphs = "1.12.1"
 OMEinsum = "0.8.5"
 OMEinsumContractionOrders = "0.9.8"
 ProblemReductions = "0.3.3"
+TensorInference = "0.5.0"
 julia = "1.11"
 
 [extras]
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 TensorInference = "c2297e78-99bd-40ad-871d-f50e56b81012"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-
 
 [targets]
 test = ["Test", "TensorInference", "Random"]

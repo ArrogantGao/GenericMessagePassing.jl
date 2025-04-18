@@ -2,7 +2,7 @@
 
 julia_version = "1.11.5"
 manifest_format = "2.0"
-project_hash = "41c6ea89329174370b0baa65b25a6f97060e2cca"
+project_hash = "b71efc6f7feae3be3995975667a96e23ebf63c02"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -897,6 +897,18 @@ version = "1.12.0"
 deps = ["ArgTools", "SHA"]
 uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 version = "1.10.0"
+
+[[deps.TensorInference]]
+deps = ["Artifacts", "DocStringExtensions", "LinearAlgebra", "OMEinsum", "Pkg", "PrecompileTools", "PrettyTables", "ProblemReductions", "StatsBase", "TropicalNumbers"]
+git-tree-sha1 = "d6a43a295fc116be0d4fe178eef46f0292bc4870"
+uuid = "c2297e78-99bd-40ad-871d-f50e56b81012"
+version = "0.5.0"
+
+    [deps.TensorInference.extensions]
+    TensorInferenceCUDAExt = "CUDA"
+
+    [deps.TensorInference.weakdeps]
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 
 [[deps.Test]]
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
