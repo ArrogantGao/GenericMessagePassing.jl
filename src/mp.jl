@@ -98,6 +98,9 @@ function bp_update!(factor_graph::IncidenceList, tensors::Vector{TA}, ixs::Vecto
         # normalize
         t ./= sum(t)
 
+        # damping
+        t = (1 - bp_config.damping) * t + bp_config.damping * messages_e2v[(e, v)]
+
         # update error
         # error = maximum(abs.(messages_e2v[(e, v)] .- t) ./ abs.(messages_e2v[(e, v)]))
         error = maximum(abs.(t .- messages_e2v[(e, v)]))

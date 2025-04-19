@@ -11,7 +11,7 @@ export bp, message2marginals
 include("types.jl")
 include("utils.jl")
 
-include("bp.jl")
+include("mp.jl")
 include("tnmp.jl")
 include("ftnmp.jl")
 

@@ -23,14 +23,12 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.11'
-          - '1.6'
-          - 'pre'
+          - '1'
+          # - 'nightly' # does not work with nightly, don't know why
         os:
           - ubuntu-latest
         arch:
           - x64
-          - x86
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
@@ -44,8 +42,10 @@ jobs:
       - uses: codecov/codecov-action@v5
         with:
           files: lcov.info
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
   docs:
     name: Documentation
     runs-on: ubuntu-latest

@@ -2,5 +2,5 @@ using GenericMessagePassing
 using Test
 
 @testset "GenericMessagePassing.jl" begin
-   include("bp.jl")
+   include("mp.jl")
 end
