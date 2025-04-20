@@ -1,8 +1,7 @@
 module GenericMessagePassing
 
 using Graphs
-using ProblemReductions, GenericTensorNetworks
-using OMEinsum, OMEinsumContractionOrders
+using ProblemReductions, GenericTensorNetworks, OMEinsum
 using TensorInference
 
 export BPConfig
@@ -13,6 +12,5 @@ include("utils.jl")
 
 include("mp.jl")
 include("tnmp.jl")
-include("ftnmp.jl")
 
 end

@@ -27,10 +27,9 @@ function marginal_ising(g::SimpleGraph, h::Vector{T}, J::Vector{T}, β::Float64;
 
     code = EinCode(getixsv(tn.code)[nv(g)+1:end], Int[])
     tensors = tn.tensors[nv(g)+1:end]
-    size_dict = uniformsize(code, 2)
 
-    bp_config = BPConfig(random_order = true, verbose = verbose, max_iter = 1000, error = 1e-12)
-    bp_sol = message2marginals(bp(code, size_dict, tensors, bp_config)[1])
+    bp_config = BPConfig(random_order = true, verbose = verbose, max_iter = 5000, error = 1e-8)
+    bp_sol = message2marginals(bp(code, tensors, bp_config)[1])
     return bp_sol, ti_sol
 end
 
@@ -40,9 +39,19 @@ function marginal_ising_bp(g::SimpleGraph, h::Vector{T}, J::Vector{T}, β::Float
 
     code = EinCode(getixsv(tn.code)[nv(g)+1:end], Int[])
     tensors = tn.tensors[nv(g)+1:end]
-    size_dict = uniformsize(code, 2)
 
-    bp_config = BPConfig(random_order = true, verbose = verbose, max_iter = 1000, error = 1e-12)
-    bp_sol = message2marginals(bp(code, size_dict, tensors, bp_config)[1])
+    bp_config = BPConfig(random_order = true, verbose = verbose, max_iter = 5000, error = 1e-8)
+    bp_sol = message2marginals(bp(code, tensors, bp_config)[1])
     return bp_sol
+end
+
+
+function intcode(code::TC) where TC <: AbstractEinsum
+    ids = uniquelabels(code)
+    correspondence = Dict(zip(ids, 1:length(ids)))
+    inv_correspondence = Dict(zip(1:length(ids), ids))
+    ixs = getixsv(code)
+    iy = getiyv(code)
+    icode = EinCode([[correspondence[ixi] for ixi in ix] for ix in ixs], [correspondence[iyi] for iyi in iy])
+    return icode, inv_correspondence
 end

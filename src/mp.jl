@@ -1,21 +1,25 @@
 # given a tensor network, solve the message via bp
 # notice that this is pure bp, did not use tn for update
 
-using OMEinsumContractionOrders: IncidenceList
+using OMEinsum.OMEinsumContractionOrders: IncidenceList
 
-function bp(code::AbstractEinsum, size_dict::Dict{TL, Int}, tensors::Vector{TA}, bp_config::BPConfig) where {TL, TA<:AbstractArray}
+function bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPConfig) where {TA<:AbstractArray}
     TT = eltype(TA)
 
-    ixs = getixsv(code)
-    iy = getiyv(code)
-    ids = uniquelabels(code)
+    icode, idict = intcode(code)
+
+    ixs = getixsv(icode)
+    iy = getiyv(icode)
+    ids = uniquelabels(icode)
+    size_dict = OMEinsum.get_size_dict(ixs, tensors)
+
     # factor graph, e are the indices, v are the tensors
     factor_graph = IncidenceList(Dict([i=>ix for (i, ix) in enumerate(ixs)]), openedges = iy)
 
     # initialize messages
     # 1. from indices to tensors: messages_e2v
     
-    messages_e2v = Dict{Tuple{TL, Int}, Vector{TT}}()
+    messages_e2v = Dict{Tuple{Int, Int}, Vector{TT}}()
     # random initialize
     for e in ids
         for v in factor_graph.e2v[e]
@@ -32,11 +36,14 @@ function bp(code::AbstractEinsum, size_dict::Dict{TL, Int}, tensors::Vector{TA},
     end
 
     # 1. from tensors to indices: messages_v2e
-    messages_v2e = Dict{Tuple{Int, TL}, Vector{TT}}()
+    new_messages_e2v = Dict{Tuple{Int, Int}, Vector{TT}}()
+    messages_v2e = Dict{Tuple{Int, Int}, Vector{TT}}()
     # update messages_v2e according to the updated messages_e2v
     for (e, v) in keys(messages_e2v)
+        new_messages_e2v[(idict[e], v)] = messages_e2v[(e, v)]
+
         local_tensors = Vector{AbstractArray{TT}}()
-        local_ixs = Vector{Vector{TL}}()
+        local_ixs = Vector{Vector{Int}}()
         local_iy = [e]
         
         push!(local_tensors, tensors[v])
@@ -55,23 +62,22 @@ function bp(code::AbstractEinsum, size_dict::Dict{TL, Int}, tensors::Vector{TA},
         t = nested_code(local_tensors...)
 
         # normalize
-        messages_v2e[(v, e)] = t ./ sum(t)
+        messages_v2e[(v, idict[e])] = t ./ sum(t)
     end
 
-    return messages_v2e, messages_e2v
+    return messages_v2e, new_messages_e2v
 end
 
-function bp_update!(factor_graph::IncidenceList, tensors::Vector{TA}, ixs::Vector{Vector{TL}}, size_dict::Dict{TL, Int}, messages_e2v::Dict{Tuple{TL, Int}, Vector{TT}}, bp_config::BPConfig) where {TL, TT<:Number, TA<:AbstractArray}
+function bp_update!(factor_graph::IncidenceList, tensors::Vector{TA}, ixs::Vector{Vector{Int}}, size_dict::Dict{Int, Int}, messages_e2v::Dict{Tuple{Int, Int}, Vector{TT}}, bp_config::BPConfig) where {TT<:Number, TA<:AbstractArray}
     t = collect(keys(messages_e2v))
     order = bp_config.random_order ? t[sortperm(rand(length(t)))] : t
 
-    error_max_v2e = 0.0
     error_max_e2v = 0.0
 
     for (e, v) in order
         # update messages_e2v
         local_tensors = Vector{AbstractArray{TT}}()
-        local_ixs = Vector{Vector{TL}}()
+        local_ixs = Vector{Vector{Int}}()
         local_iy = [e]
         
         for vp in factor_graph.e2v[e]

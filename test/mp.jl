@@ -1,7 +1,6 @@
 using GenericMessagePassing
 using Graphs
-using ProblemReductions, GenericTensorNetworks
-using OMEinsum, OMEinsumContractionOrders
+using ProblemReductions, GenericTensorNetworks, OMEinsum
 using TensorInference
 
 using Test
@@ -24,11 +23,10 @@ end
 
     tensors = tn.tensors
     code = tn.code
-    size_dict = uniformsize(code, 2)
 
     for random_order in [true, false]
         bp_config = BPConfig(random_order = random_order, verbose = true)
-        bp_sol = message2marginals(bp(code, size_dict, tensors, bp_config)[1])
+        bp_sol = message2marginals(bp(code, tensors, bp_config)[1])
         for i in keys(bp_sol)
             @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
             @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
@@ -36,18 +34,20 @@ end
     end
 end
 
-@testset "marginal spinglass" begin
+@testset "marginal spinglass tree" begin
     # tree
     g = GenericMessagePassing.random_tree(30)
     h = ones(nv(g))
     J = ones(ne(g))
     β = 1.0
-    bp_sol, ti_sol = GenericMessagePassing.marginal_ising(g, h, J, β)
+    bp_sol, ti_sol = GenericMessagePassing.marginal_ising(g, h, J, β, verbose = true)
     for i in keys(bp_sol)
         @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
         @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
     end
+end
 
+@testset "marginal spinglass cycle" begin
     # cycle
     g = SimpleGraph(30)
     for i in 1:29
@@ -62,7 +62,9 @@ end
         @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
         @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
     end
+end
 
+@testset "marginal spinglass rr3" begin
     # rr3
     g = random_regular_graph(30, 3)
     h = ones(nv(g))
@@ -90,7 +92,7 @@ end
 
         for random_order in [true, false]
             bp_config = BPConfig(random_order = random_order, verbose = true, error = 1e-12)
-            bp_sol = message2marginals(bp(code, size_dict, tensors, bp_config)[1])
+            bp_sol = message2marginals(bp(code, tensors, bp_config)[1])
             for i in keys(bp_sol)
                 @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-2)
                 @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-2)
