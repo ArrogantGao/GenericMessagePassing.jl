@@ -1,10 +1,17 @@
 module GenericMessagePassing
 
+# imported packages
 using Graphs
 using ProblemReductions, GenericTensorNetworks, OMEinsum
 using TensorInference
 
-export BPConfig
+# imported functions
+using OMEinsum.OMEinsumContractionOrders: IncidenceList
+
+# exported types
+export BPConfig, TNBPConfig
+
+# exported functions
 export bp, message2marginals
 
 include("types.jl")

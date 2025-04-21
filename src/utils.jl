@@ -45,13 +45,69 @@ function marginal_ising_bp(g::SimpleGraph, h::Vector{T}, J::Vector{T}, β::Float
     return bp_sol
 end
 
-
 function intcode(code::TC) where TC <: AbstractEinsum
     ids = uniquelabels(code)
-    correspondence = Dict(zip(ids, 1:length(ids)))
-    inv_correspondence = Dict(zip(1:length(ids), ids))
+    dict = Dict(zip(ids, 1:length(ids)))
+    idict = Dict(zip(1:length(ids), ids))
     ixs = getixsv(code)
     iy = getiyv(code)
-    icode = EinCode([[correspondence[ixi] for ixi in ix] for ix in ixs], [correspondence[iyi] for iyi in iy])
-    return icode, inv_correspondence
+    icode = EinCode([[dict[ixi] for ixi in ix] for ix in ixs], [dict[iyi] for iyi in iy])
+    return icode, idict
 end
+
+# in this function, we assume that the vertices of the factor graph are represented by integers from 1 to n
+function linegraph(fg::IncidenceList{Int, Int})
+    lg = SimpleGraph(length(keys(fg.e2v)))
+    for e in keys(fg.e2v)
+        for v in fg.e2v[e]
+            for w in fg.v2e[v]
+                (e != w) && add_edge!(lg, e, w)
+            end
+        end
+    end
+    return lg
+end
+
+function open_neighbors(g::Union{SimpleGraph, FactorGraph}, vs::Vector{Int})
+    neis = Vector{Int}()
+    for v in vs
+        for w in neighbors(g, v)
+            push!(neis, w)
+        end
+    end
+    return setdiff(unique!(neis), vs)
+end
+
+function open_boundaries(g::Union{SimpleGraph, FactorGraph}, vs::Vector{Int})
+    boundaries = Vector{Int}()
+    for v in vs
+        if !isempty(setdiff(neighbors(g, v), vs))
+            push!(boundaries, v)
+        end
+    end
+    return boundaries
+end
+
+function isolate_vertex!(fg::FactorGraph, v)
+    ws = copy(neighbors(fg, v))
+    for w in ws
+        rem_edge!(fg, v, w)
+    end
+    return true
+end
+function isolate_vertices!(fg::FactorGraph, vs)
+    for v in vs
+        isolate_vertex!(fg, v)
+    end
+    return true
+end
+function isolate_pairs!(fg::FactorGraph, vs)
+    for i in 1:length(vs) - 1, j in i + 1:length(vs)
+        if has_edge(fg, vs[i], vs[j])
+            rem_edge!(fg, vs[i], vs[j])
+        end
+    end
+    return true
+end
+
+Graphs.a_star(fg::FactorGraph, s, d) = a_star(fg.g, s, d)
