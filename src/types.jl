@@ -6,7 +6,43 @@
     verbose::Bool = false
 end
 
-# factor graph, the first num_vars are the variables (the tensors), the rest are the factors (the indices)
+Base.show(io::IO, bp_config::BPConfig) = print(io, 
+"""
+BPConfig{
+    error: $(bp_config.error), 
+    max_iter: $(bp_config.max_iter), 
+    random_order: $(bp_config.random_order), 
+    damping: $(bp_config.damping), 
+    verbose: $(bp_config.verbose)
+}
+"""
+)
+
+@kwdef struct TNBPConfig
+    error::Float64 = 1e-6
+    max_iter::Int = 10000
+    random_order::Bool = true
+    damping::Float64 = 0.2
+    verbose::Bool = false
+    r::Int = 3
+    optimizer::CodeOptimizer = GreedyMethod()
+end
+
+Base.show(io::IO, tnbp_config::TNBPConfig) = print(io, 
+"""
+TNBPConfig{
+    error: $(tnbp_config.error), 
+    max_iter: $(tnbp_config.max_iter), 
+    random_order: $(tnbp_config.random_order),
+    damping: $(tnbp_config.damping),
+    verbose: $(tnbp_config.verbose),
+    r: $(tnbp_config.r),
+    optimizer: $(tnbp_config.optimizer)
+}
+"""
+)
+
+# factor graph, the first num_vars are the variables (the indices), the rest are the factors (the tensors)
 struct FactorGraph{T}
     g::SimpleGraph{T}
     num_vars::Int
@@ -19,12 +55,12 @@ struct FactorGraph{T}
         new{T}(g, num_vars)
     end
     function FactorGraph(hyper_graph::IncidenceList)
-        num_vars = length(keys(hyper_graph.v2e))
-        num_factors = length(keys(hyper_graph.e2v))
+        num_factors = length(keys(hyper_graph.v2e))
+        num_vars = length(keys(hyper_graph.e2v))
         g = SimpleGraph(num_vars + num_factors)
         for e in keys(hyper_graph.e2v)
             for v in hyper_graph.e2v[e]
-                add_edge!(g, num_vars + e, v)
+                add_edge!(g, num_vars + v, e)
             end
         end
         FactorGraph(g, num_vars)
@@ -49,12 +85,3 @@ Graphs.add_vertices!(fg::FactorGraph, n) = add_vertices!(fg.g, n)
 Graphs.neighbors(fg::FactorGraph, v) = neighbors(fg.g, v)
 is_factor(fg::FactorGraph, v) = v > fg.num_vars
 is_variable(fg::FactorGraph, v) = v ≤ fg.num_vars
-
-@kwdef struct TNBPConfig
-    error::Float64 = 1e-6
-    max_iter::Int = 10000
-    random_order::Bool = true
-    damping::Float64 = 0.2
-    verbose::Bool = false
-    r::Int = 5
-end

@@ -2,7 +2,7 @@
 
 julia_version = "1.11.5"
 manifest_format = "2.0"
-project_hash = "23adc408e03adc024f9191b91170d430a6effa46"
+project_hash = "7bd6597f87a8724d5bcad7afc04fc66d446b9b16"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -91,9 +91,9 @@ weakdeps = ["SparseArrays"]
 
 [[deps.CliqueTrees]]
 deps = ["AbstractTrees", "ArgCheck", "DataStructures", "Graphs", "LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "ecaeb26e178c310f958f55a13a7fa434ba978e97"
+git-tree-sha1 = "4f43fbf406a2e15c583d75142c7bdddaac3f618e"
 uuid = "60701a23-6482-424a-84db-faee86b9b1f8"
-version = "1.4.2"
+version = "1.5.0"
 
     [deps.CliqueTrees.extensions]
     AMDExt = "AMD"

@@ -17,13 +17,14 @@ function generate_neighborhoods(fg::FactorGraph{T}, r::Int) where T
         isolate_pairs!(fgt, boundary)
 
         for rr in 1:r
+            safe_pairs = Set{Tuple{Int, Int}}()
             while true
                 length(boundary) ≤ 1 && break
                 flag = true
                 for i in 1:length(boundary) - 1
                     for j in i + 1:length(boundary)
-                        s = boundary[i]
-                        d = boundary[j]
+                        (s, d) = minmax(boundary[i], boundary[j])
+                        ((s, d) ∈ safe_pairs) && continue
 
                         path = a_star(fgt, s, d)
                         if !isempty(path) && length(path) - 1 ≤ rr
@@ -35,6 +36,7 @@ function generate_neighborhoods(fg::FactorGraph{T}, r::Int) where T
                             flag = false
                             break
                         end
+                        push!(safe_pairs, (s, d))
                     end
                     # neib is modified, break
                     !(flag) && break
@@ -54,7 +56,7 @@ function generate_neighborhoods(fg::FactorGraph{T}, r::Int) where T
     return neibs, boundaries
 end
 
-function precompute_eins(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs::Vector{Vector{Int}}, boundaries::Vector{Vector{Int}}; optimizer::CodeOptimizer = GreedyMethod()) where {TA <: AbstractArray, TE <: AbstractEinsum}
+function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs::Vector{Vector{Int}}, boundaries::Vector{Vector{Int}}, optimizer::CodeOptimizer) where {TA <: AbstractArray, TE <: AbstractEinsum}
 
     TT = eltype(TA)
 
@@ -75,9 +77,9 @@ function precompute_eins(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
         for w in boundary_v
             # message from w to neighborhood of v
             if is_factor(fg, w)
-                local_iy = [w - fg.num_vars]
+                local_iy = [u for u in neighbors(fg, w) if u ∈ neib_v]
             else
-                local_iy = [u - fg.num_vars for u in neighbors(fg, w) if u ∈ neib_v]
+                local_iy = [w]
             end
             local_iys[(w, v)] = local_iy
             t = rand(TT, [size_dict[y] for y in local_iy]...)
@@ -96,61 +98,70 @@ function precompute_eins(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
             boundary_w = boundaries[w]
             local_region = setdiff(neib_w, core_v)
 
-            @show v, w
-            @show neib_w, neib_v
-            @show boundary_w, boundary_v
-            @show core_v
-            @show local_region
-
             local_tensors = Vector{AbstractArray}()
             local_ixs = Vector{Vector{Int}}()
 
             boundary_with_message = intersect(boundary_w, local_region)
             boundary_without_message = setdiff(open_boundaries(fg, local_region), boundary_with_message)
-
-            @show boundary_with_message
-            @show boundary_without_message
             
             for b in local_region
-                @show b
                 if b == w
-                    if is_variable(fg, b)
-                        push!(local_ixs, ixs[b])
-                        @show ixs[b]
-                        push!(local_tensors, tensors[b])
+                    if is_factor(fg, b)
+                        push!(local_ixs, ixs[b - fg.num_vars])
+                        push!(local_tensors, tensors[b - fg.num_vars])
                     end
                 elseif b ∈ boundary_with_message
                     push!(local_ixs, local_iys[(b, w)])
                     push!(local_tensors, messages[(b, w)])
                 elseif b ∈ boundary_without_message
                     if is_factor(fg, b)
-                        local_ix = [b - fg.num_vars]
+                        local_ix = [u for u in neighbors(fg, b) if u ∈ local_region]
                     else
-                        local_ix = [u - fg.num_vars for u in neighbors(fg, b) if u ∈ local_region]
+                        local_ix = [b]
                     end
                     t = ones(TT, [size_dict[x] for x in local_ix]...)
                     push!(local_ixs, local_ix)
                     push!(local_tensors, t ./ sum(t))
                 else
-                    if is_variable(fg, b)
-                        push!(local_ixs, ixs[b])
-                        push!(local_tensors, tensors[b])
+                    if is_factor(fg, b)
+                        push!(local_ixs, ixs[b - fg.num_vars])
+                        push!(local_tensors, tensors[b - fg.num_vars])
                     end
                 end
             end
 
             eincode = EinCode(local_ixs, local_iys[(w, v)])
-
-            @show eincode
-
-            optcode = optimize_code(eincode, size_dict, optimizer)
+            @suppress optcode = optimize_code(eincode, size_dict, optimizer)
             eins[(w, v)] = optcode
             ptensors[(w, v)] = local_tensors
         end
     end
 
+    # for marginal probability calculation
+    mars_eins = Dict{Int, AbstractEinsum}()
+    mars_tensors = Dict{Int, Vector{AbstractArray}}()
+    for v in 1:fg.num_vars
+        local_ixs = Vector{Vector{Int}}()
+        local_iy = [v]
+        local_tensors = Vector{AbstractArray}()
+        for w in neibs[v]
+            if w ∈ boundaries[v]
+                push!(local_ixs, local_iys[(w, v)])
+                push!(local_tensors, messages[(w, v)])
+            else
+                if is_factor(fg, w)
+                    push!(local_ixs, ixs[w - fg.num_vars])
+                    push!(local_tensors, tensors[w - fg.num_vars])
+                end
+            end
+        end
+        eincode = EinCode(local_ixs, local_iy)
+        @suppress optcode = optimize_code(eincode, size_dict, optimizer)
+        mars_eins[v] = optcode
+        mars_tensors[v] = local_tensors
+    end
 
-    return messages, eins, ptensors
+    return messages, eins, ptensors, mars_eins, mars_tensors
 end
 
 function tnbp_update!(messages::Dict{Tuple{Int, Int}, TA}, eins::Dict{Tuple{Int, Int}, TE}, ptensors::Dict{Tuple{Int, Int}, Vector{TA}}, tnbp_config::TNBPConfig) where {TA <: AbstractArray, TE <: AbstractEinsum}
@@ -172,4 +183,55 @@ function tnbp_update!(messages::Dict{Tuple{Int, Int}, TA}, eins::Dict{Tuple{Int,
     end
 
     return error_max
+end
+
+function tnbp(code::AbstractEinsum, tensors::Vector{TA}, tnbp_config::TNBPConfig) where {TA <: AbstractArray}
+    
+    icode, idict = intcode(code)
+    ixs = getixsv(icode)
+    iy = getiyv(icode)
+
+    hyper_graph = IncidenceList(Dict([i=>ix for (i, ix) in enumerate(ixs)]), openedges = iy)
+    factor_graph = FactorGraph(hyper_graph)
+
+    neibs, boundaries = generate_neighborhoods(factor_graph, tnbp_config.r)
+
+    if tnbp_config.verbose
+        println("average size of neibs: $(mean(length.(neibs)))")
+        println("maximum size of neibs: $(maximum(length.(neibs)))")
+        println("--------------------------------")
+    end
+
+    messages, eins, ptensors, mars_eins, mars_tensors = tnbp_precompute(factor_graph, code, tensors, neibs, boundaries, tnbp_config.optimizer)
+
+    if tnbp_config.verbose
+        size_dict = OMEinsum.get_size_dict(ixs, tensors)
+        sc_max = 0
+        tc_total = 0.0
+        for (w, v) in keys(eins)
+            cc = contraction_complexity(eins[(w, v)], size_dict)
+            sc_max = max(sc_max, cc.sc)
+            tc_total += 2^cc.tc
+        end
+        println("maximum size of sc: $sc_max")
+        println("total contraction cost: $(log2(tc_total))")
+        println("--------------------------------")
+    end
+
+    # tnbp update
+    for i in 1:tnbp_config.max_iter
+        error_max = tnbp_update!(messages, eins, ptensors, tnbp_config)
+        tnbp_config.verbose && println("iter $i: error_max = $error_max")
+        error_max < tnbp_config.error && break
+    end
+
+    # calculate the marginal probability of the variables
+    mars = Dict()
+    for v in 1:factor_graph.num_vars
+        t = mars_eins[v](mars_tensors[v]...)
+        t = t ./ sum(t)
+        mars[idict[v]] = t
+    end
+            
+    return mars
 end
