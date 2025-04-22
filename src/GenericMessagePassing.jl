@@ -17,6 +17,7 @@ export BPConfig, TNBPConfig
 export marginal_bp, marginal_tnbp
 
 include("types.jl")
+include("generic.jl")
 include("utils.jl")
 
 include("mp.jl")

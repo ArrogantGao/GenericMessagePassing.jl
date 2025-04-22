@@ -1,9 +1,7 @@
 # given a tensor network, solve the message via bp
 # notice that this is pure bp, did not use tn for update
 
-function marginal_bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPConfig) where {TA<:AbstractArray}
-    TT = eltype(TA)
-
+function marginal_bp(code::AbstractEinsum, tensors::Vector{Array{TT}}, bp_config::BPConfig) where {TT<:Number}
     icode, idict = intcode(code)
 
     ixs = getixsv(icode)
@@ -21,8 +19,8 @@ function marginal_bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPCon
     for e in ids
         for v in hyper_graph.e2v[e]
             (length(ixs[v]) == 1) && continue # message to a 1d tensor is not needed
-            messages_e2v[(e, v)] = rand(TT, size_dict[e])
-            messages_e2v[(e, v)] ./= sum(messages_e2v[(e, v)])
+            messages_e2v[(e, v)] = uniform(TT, size_dict[e]) # init with uniform vector
+            normalize!(messages_e2v[(e, v)])
         end
     end
 
@@ -37,7 +35,7 @@ function marginal_bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPCon
     messages_v2e = Dict{Tuple{Int, Int}, Vector{TT}}()
     # update messages_v2e according to the updated messages_e2v
     for e in ids, v in hyper_graph.e2v[e]
-        local_tensors = Vector{AbstractArray{TT}}()
+        local_tensors = Vector{Array{TT}}()
         local_ixs = Vector{Vector{Int}}()
         local_iy = [e]
         
@@ -57,7 +55,7 @@ function marginal_bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPCon
         t = nested_code(local_tensors...)
 
         # normalize
-        messages_v2e[(v, e)] = t ./ sum(t)
+        messages_v2e[(v, e)] = normalize!(t)
     end
 
     marginals = Dict{Int, Vector{TT}}()
@@ -68,14 +66,14 @@ function marginal_bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPCon
     end
 
     for e in keys(marginals)
-        marginals[e] ./= sum(marginals[e])
+        normalize!(marginals[e])
         new_marginals[idict[e]] = marginals[e]
     end
 
     return new_marginals
 end
 
-function bp_update!(hyper_graph::IncidenceList, tensors::Vector{TA}, ixs::Vector{Vector{Int}}, size_dict::Dict{Int, Int}, messages_e2v::Dict{Tuple{Int, Int}, Vector{TT}}, bp_config::BPConfig) where {TT<:Number, TA<:AbstractArray}
+function bp_update!(hyper_graph::IncidenceList, tensors::Vector{Array{TT}}, ixs::Vector{Vector{Int}}, size_dict::Dict{Int, Int}, messages_e2v::Dict{Tuple{Int, Int}, Vector{TT}}, bp_config::BPConfig) where {TT<:Number}
     t = collect(keys(messages_e2v))
     order = bp_config.random_order ? t[sortperm(rand(length(t)))] : t
 
@@ -107,17 +105,14 @@ function bp_update!(hyper_graph::IncidenceList, tensors::Vector{TA}, ixs::Vector
         rawcode = EinCode(local_ixs, local_iy)
         nested_code = optimize_code(rawcode, size_dict, GreedyMethod())
         t = nested_code(local_tensors...)
-
-        # normalize
-        t ./= sum(t)
-
-        # damping
-        t = (1 - bp_config.damping) * t + bp_config.damping * messages_e2v[(e, v)]
+        normalize!(t)
 
         # update error
-        # error = maximum(abs.(messages_e2v[(e, v)] .- t) ./ abs.(messages_e2v[(e, v)]))
-        error = maximum(abs.(t .- messages_e2v[(e, v)]))
-        error_max_e2v = max(error_max_e2v, error)
+        error_t = abs_error(messages_e2v[(e, v)], t)
+        error_max_e2v = max(error_max_e2v, error_t)
+
+        # damping
+        damp!(messages_e2v[(e, v)], t, bp_config.damping)
 
         messages_e2v[(e, v)] = t
     end

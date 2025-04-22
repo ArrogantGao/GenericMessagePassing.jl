@@ -5,11 +5,14 @@
 # generate neighbor hoods of the vertices of a factor graph
 # r is the shortest path between the boundary vertices of neighborhood after removing the vertices of the neighborhood in the factor graph
 function generate_neighborhoods(fg::FactorGraph{T}, r::Int) where T
-    neibs = Vector{Vector{Int}}()
-    boundaries = Vector{Vector{Int}}()
+    neibs = Dict{Int, Vector{Int}}()
+    boundaries = Dict{Int, Vector{Int}}()
     
     # for each vertex v in the factor graph, generate its neighborhood so that the shortest path between the boundary vertices of the neighborhood is r
     for v in vertices(fg)
+        # if v is a rank-1 tensor, skip
+        (is_factor(fg, v) && length(neighbors(fg, v)) ≤ 1) && continue
+
         fgt = copy(fg)
         neib = vcat([v], neighbors(fg, v))
         boundary = open_boundaries(fg, neib)
@@ -17,8 +20,25 @@ function generate_neighborhoods(fg::FactorGraph{T}, r::Int) where T
         isolate_pairs!(fgt, boundary)
 
         for rr in 1:r
+            safe_vertices = Set{Int}()
             safe_pairs = Set{Tuple{Int, Int}}()
             while true
+                boundary = open_boundaries(fg, neib)
+                for v in boundary
+                    v ∈ safe_vertices && continue
+                    for w in neighbors(fg, v)
+                        if length(neighbors(fg, w)) == 1
+                            push!(neib, w)
+                        end
+                    end
+                    push!(safe_vertices, v)
+                end
+
+                unique!(neib)
+                boundary = open_boundaries(fg, neib)
+                isolate_vertices!(fgt, setdiff(neib, boundary))
+                isolate_pairs!(fgt, boundary)
+
                 length(boundary) ≤ 1 && break
                 flag = true
                 for i in 1:length(boundary) - 1
@@ -41,22 +61,18 @@ function generate_neighborhoods(fg::FactorGraph{T}, r::Int) where T
                     # neib is modified, break
                     !(flag) && break
                 end
-
-                boundary = open_boundaries(fg, neib)
-                isolate_vertices!(fgt, setdiff(neib, boundary))
-                isolate_pairs!(fgt, boundary)
-
                 # if flag is true (all conditions satisfied), break
                 flag && break
             end
         end
-        push!(neibs, neib)
-        push!(boundaries, boundary)
+
+        neibs[v] = neib
+        boundaries[v] = open_boundaries(fg, neib)
     end
     return neibs, boundaries
 end
 
-function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs::Vector{Vector{Int}}, boundaries::Vector{Vector{Int}}, optimizer::CodeOptimizer) where {TA <: AbstractArray, TE <: AbstractEinsum}
+function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs::Dict{Int, Vector{Int}}, boundaries::Dict{Int, Vector{Int}}, optimizer::CodeOptimizer) where {TA <: AbstractArray, TE <: AbstractEinsum}
 
     TT = eltype(TA)
 
@@ -69,7 +85,7 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
     ixs = getixsv(icode)
     size_dict = OMEinsum.get_size_dict(ixs, tensors)
 
-    for v in vertices(fg)
+    for v in keys(neibs)
         neib_v = neibs[v]
         boundary_v = boundaries[v]
 
@@ -87,7 +103,7 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
         end
     end
 
-    for v in vertices(fg)
+    for v in keys(neibs)
         neib_v = neibs[v]
         boundary_v = boundaries[v]
 
@@ -131,7 +147,7 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
             end
 
             eincode = EinCode(local_ixs, local_iys[(w, v)])
-            @suppress optcode = optimize_code(eincode, size_dict, optimizer)
+            optcode = @suppress optimize_code(eincode, size_dict, optimizer)
             eins[(w, v)] = optcode
             ptensors[(w, v)] = local_tensors
         end
@@ -156,7 +172,7 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
             end
         end
         eincode = EinCode(local_ixs, local_iy)
-        @suppress optcode = optimize_code(eincode, size_dict, optimizer)
+        optcode = @suppress optimize_code(eincode, size_dict, optimizer)
         mars_eins[v] = optcode
         mars_tensors[v] = local_tensors
     end
@@ -197,12 +213,13 @@ function marginal_tnbp(code::AbstractEinsum, tensors::Vector{TA}, tnbp_config::T
     neibs, boundaries = generate_neighborhoods(factor_graph, tnbp_config.r)
 
     if tnbp_config.verbose
-        println("average size of neibs: $(mean(length.(neibs)))")
-        println("maximum size of neibs: $(maximum(length.(neibs)))")
+        println("--------------------------------")
+        println("average size of neibs: $(mean(length.(values(neibs))))")
+        println("maximum size of neibs: $(maximum(length.(values(neibs))))")
         println("--------------------------------")
     end
 
-    messages, eins, ptensors, mars_eins, mars_tensors = tnbp_precompute(factor_graph, code, tensors, neibs, boundaries, tnbp_config.optimizer)
+    messages, eins, ptensors, mars_eins, mars_tensors = tnbp_precompute(factor_graph, icode, tensors, neibs, boundaries, tnbp_config.optimizer)
 
     if tnbp_config.verbose
         size_dict = OMEinsum.get_size_dict(ixs, tensors)

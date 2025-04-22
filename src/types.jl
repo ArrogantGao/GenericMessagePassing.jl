@@ -65,6 +65,12 @@ struct FactorGraph{T}
         end
         FactorGraph(g, num_vars)
     end
+    function FactorGraph(code::TE) where TE <: AbstractEinsum
+        ixs = getixsv(code)
+        iy = getiyv(code)
+        hyper_graph = IncidenceList(Dict([i=>ix for (i, ix) in enumerate(ixs)]), openedges = iy)
+        FactorGraph(hyper_graph)
+    end
 end
 
 Base.show(io::IO, fg::FactorGraph) = print(io, "FactorGraph{variables: $(fg.num_vars), factors: $(nv(fg.g) - fg.num_vars)}")
