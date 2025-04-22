@@ -1,7 +1,7 @@
 # given a tensor network, solve the message via bp
 # notice that this is pure bp, did not use tn for update
 
-function bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPConfig) where {TA<:AbstractArray}
+function marginal_bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPConfig) where {TA<:AbstractArray}
     TT = eltype(TA)
 
     icode, idict = intcode(code)
@@ -34,7 +34,6 @@ function bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPConfig) wher
     end
 
     # 1. from tensors to indices: messages_v2e
-    new_messages_e2v = Dict{Tuple{Int, Int}, Vector{TT}}()
     messages_v2e = Dict{Tuple{Int, Int}, Vector{TT}}()
     # update messages_v2e according to the updated messages_e2v
     for e in ids, v in hyper_graph.e2v[e]
@@ -58,14 +57,22 @@ function bp(code::AbstractEinsum, tensors::Vector{TA}, bp_config::BPConfig) wher
         t = nested_code(local_tensors...)
 
         # normalize
-        messages_v2e[(v, idict[e])] = t ./ sum(t)
+        messages_v2e[(v, e)] = t ./ sum(t)
     end
 
-    for (e, v) in keys(messages_e2v)
-        new_messages_e2v[(idict[e], v)] = messages_e2v[(e, v)]
+    marginals = Dict{Int, Vector{TT}}()
+    new_marginals = Dict()
+
+    for (v, e) in collect(keys(messages_v2e))
+        haskey(marginals, e) ? marginals[e] .*= messages_v2e[(v, e)] : marginals[e] = messages_v2e[(v, e)]
     end
 
-    return messages_v2e, new_messages_e2v
+    for e in keys(marginals)
+        marginals[e] ./= sum(marginals[e])
+        new_marginals[idict[e]] = marginals[e]
+    end
+
+    return new_marginals
 end
 
 function bp_update!(hyper_graph::IncidenceList, tensors::Vector{TA}, ixs::Vector{Vector{Int}}, size_dict::Dict{Int, Int}, messages_e2v::Dict{Tuple{Int, Int}, Vector{TT}}, bp_config::BPConfig) where {TT<:Number, TA<:AbstractArray}

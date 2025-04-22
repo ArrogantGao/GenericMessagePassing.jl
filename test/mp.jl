@@ -26,7 +26,7 @@ end
 
     for random_order in [true, false]
         bp_config = BPConfig(random_order = random_order, verbose = true)
-        bp_sol = message2marginals(bp(code, tensors, bp_config)[1])
+        bp_sol = marginal_bp(code, tensors, bp_config)
         for i in keys(bp_sol)
             @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
             @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
@@ -40,7 +40,9 @@ end
     h = ones(nv(g))
     J = ones(ne(g))
     β = 1.0
-    bp_sol, ti_sol = GenericMessagePassing.marginal_ising(g, h, J, β, verbose = true)
+    tn, code, tensors = GenericMessagePassing.ising_model(g, h, J, β, verbose = true)
+    ti_sol = marginals(tn)
+    bp_sol = marginal_bp(code, tensors, BPConfig(verbose = true))
     for i in keys(bp_sol)
         @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
         @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
@@ -57,7 +59,9 @@ end
     h = ones(nv(g))
     J = ones(ne(g))
     β = 1.0
-    bp_sol, ti_sol = GenericMessagePassing.marginal_ising(g, h, J, β)
+    tn, code, tensors = GenericMessagePassing.ising_model(g, h, J, β, verbose = true)
+    ti_sol = marginals(tn)
+    bp_sol = marginal_bp(code, tensors, BPConfig(verbose = true))
     for i in keys(bp_sol)
         @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
         @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
@@ -70,7 +74,9 @@ end
     h = ones(nv(g))
     J = -1 .* ones(ne(g))
     β = 1.0
-    bp_sol, ti_sol = GenericMessagePassing.marginal_ising(g, h, J, β)
+    tn, code, tensors = GenericMessagePassing.ising_model(g, h, J, β, verbose = true)
+    ti_sol = marginals(tn)
+    bp_sol = marginal_bp(code, tensors, BPConfig(verbose = true))
     for i in keys(bp_sol)
         @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
         @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
@@ -92,7 +98,7 @@ end
 
         for random_order in [true, false]
             bp_config = BPConfig(random_order = random_order, verbose = true, error = 1e-12)
-            bp_sol = message2marginals(bp(code, tensors, bp_config)[1])
+            bp_sol = marginal_bp(code, tensors, bp_config)
             for i in keys(bp_sol)
                 @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-2)
                 @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-2)

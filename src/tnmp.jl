@@ -185,7 +185,7 @@ function tnbp_update!(messages::Dict{Tuple{Int, Int}, TA}, eins::Dict{Tuple{Int,
     return error_max
 end
 
-function tnbp(code::AbstractEinsum, tensors::Vector{TA}, tnbp_config::TNBPConfig) where {TA <: AbstractArray}
+function marginal_tnbp(code::AbstractEinsum, tensors::Vector{TA}, tnbp_config::TNBPConfig) where {TA <: AbstractArray}
     
     icode, idict = intcode(code)
     ixs = getixsv(icode)

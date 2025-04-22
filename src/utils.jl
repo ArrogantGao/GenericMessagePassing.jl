@@ -1,17 +1,3 @@
-function message2marginals(messages_v2e::Dict{Tuple{Int, TL}, Vector{TT}}) where {TL, TT<:Number}
-
-    marginals = Dict{TL, Vector{TT}}()
-    for (v, e) in collect(keys(messages_v2e))
-        haskey(marginals, e) ? marginals[e] .*= messages_v2e[(v, e)] : marginals[e] = messages_v2e[(v, e)]
-    end
-
-    for e in keys(marginals)
-        marginals[e] ./= sum(marginals[e])
-    end
-
-    return marginals
-end
-
 function random_tree(n::Int)
     tree_g = SimpleGraph(n)
     for i in 2:n
@@ -20,29 +6,14 @@ function random_tree(n::Int)
     return tree_g
 end
 
-function marginal_ising(g::SimpleGraph, h::Vector{T}, J::Vector{T}, β::Float64; verbose::Bool = false) where T<:Number
+function ising_model(g::SimpleGraph, h::Vector{T}, J::Vector{T}, β::Float64; verbose::Bool = false) where T<:Number
     p = SpinGlass(g, J, h)
     tn = TensorNetworkModel(p, β, optimizer = TreeSA(sc_target = 20, ntrials = 1, niters = 5, βs = 0.1:0.1:100))
-    ti_sol = marginals(tn)
 
     code = EinCode(getixsv(tn.code)[nv(g)+1:end], Int[])
     tensors = tn.tensors[nv(g)+1:end]
 
-    bp_config = BPConfig(random_order = true, verbose = verbose, max_iter = 5000, error = 1e-8)
-    bp_sol = message2marginals(bp(code, tensors, bp_config)[1])
-    return bp_sol, ti_sol
-end
-
-function marginal_ising_bp(g::SimpleGraph, h::Vector{T}, J::Vector{T}, β::Float64; verbose::Bool = false) where T<:Number
-    p = SpinGlass(g, J, h)
-    tn = TensorNetworkModel(p, β)
-
-    code = EinCode(getixsv(tn.code)[nv(g)+1:end], Int[])
-    tensors = tn.tensors[nv(g)+1:end]
-
-    bp_config = BPConfig(random_order = true, verbose = verbose, max_iter = 5000, error = 1e-8)
-    bp_sol = message2marginals(bp(code, tensors, bp_config)[1])
-    return bp_sol
+    return tn, code, tensors
 end
 
 function intcode(code::TC) where TC <: AbstractEinsum
@@ -53,19 +24,6 @@ function intcode(code::TC) where TC <: AbstractEinsum
     iy = getiyv(code)
     icode = EinCode([[dict[ixi] for ixi in ix] for ix in ixs], [dict[iyi] for iyi in iy])
     return icode, idict
-end
-
-# in this function, we assume that the vertices of the factor graph are represented by integers from 1 to n
-function linegraph(fg::IncidenceList{Int, Int})
-    lg = SimpleGraph(length(keys(fg.e2v)))
-    for e in keys(fg.e2v)
-        for v in fg.e2v[e]
-            for w in fg.v2e[v]
-                (e != w) && add_edge!(lg, e, w)
-            end
-        end
-    end
-    return lg
 end
 
 function open_neighbors(g::Union{SimpleGraph, FactorGraph}, vs::Vector{Int})
