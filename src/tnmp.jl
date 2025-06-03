@@ -119,7 +119,7 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
 
             boundary_with_message = intersect(boundary_w, local_region)
             boundary_without_message = setdiff(open_boundaries(fg, local_region), boundary_with_message)
-            
+
             for b in local_region
                 if b == w
                     if is_factor(fg, b)

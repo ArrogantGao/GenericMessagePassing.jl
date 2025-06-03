@@ -8,30 +8,47 @@ using Random
 Random.seed!(1234)
 
 @testset "neighbor generation, precomputing" begin
+    codes = []
     for g in [GenericMessagePassing.random_tree(30), random_regular_graph(100, 3), SimpleGraph(GenericTensorNetworks.random_square_lattice_graph(30, 30, 0.8))]
-        for r in [2, 3]
-            tn, code, tensors = GenericMessagePassing.ising_model(g, ones(nv(g)), ones(ne(g)), 1.0, verbose = true)
-            factor_graph = FactorGraph(code)
+        tn, code, tensors = GenericMessagePassing.ising_model(g, ones(nv(g)), ones(ne(g)), 1.0, verbose = true)
+        push!(codes, code)
+    end
 
+    for problem in [problem_from_artifact("uai2014", "MAR", "Promedus", 14), problem_from_artifact("uai2014", "MAR", "ObjectDetection", 42)]
+        model = read_model(problem)
+        tn = TensorNetworkModel(model; optimizer = GreedyMethod())
+        push!(codes, tn.code)
+    end
+
+    for code in codes
+        for r in [2, 3, 4]
+            factor_graph = FactorGraph(code)
             neibs, boundaries = GenericMessagePassing.generate_neighborhoods(factor_graph, r)
-            
-            @testset "neighbor generation" begin
-                for v in keys(neibs)
-                    @test v ∈ neibs[v]
-                    @test issubset(boundaries[v], neibs[v])
-                    @test Set(GenericMessagePassing.open_boundaries(factor_graph, neibs[v])) == Set(boundaries[v])
-                    fgt = copy(factor_graph)
-                    GenericMessagePassing.isolate_vertices!(fgt, setdiff(neibs[v], boundaries[v]))
-                    for i in 1:length(boundaries[v]) - 1
-                        for j in i+1:length(boundaries[v])
-                            s, d = boundaries[v][i], boundaries[v][j]
-                            path = a_star(fgt, s, d)
-                            @test (length(path) == 0) || (length(path) - 1 > r)
+
+            for v in keys(neibs)
+                @test v ∈ neibs[v]
+                @test issubset(boundaries[v], neibs[v])
+                @test Set(GenericMessagePassing.open_boundaries(factor_graph, neibs[v])) == Set(boundaries[v])
+                fgt = copy(factor_graph)
+                GenericMessagePassing.isolate_vertices!(fgt, setdiff(neibs[v], boundaries[v]))
+                GenericMessagePassing.isolate_pairs!(fgt, boundaries[v])
+                for i in 1:length(boundaries[v]) - 1
+                    for j in i+1:length(boundaries[v])
+                        s, d = boundaries[v][i], boundaries[v][j]
+                        path = a_star(fgt, s, d)
+                        @test (length(path) == 0) || (length(path) - 1 > r)
+                    end
+                end
+
+                for w in neibs[v]
+                    for u in neighbors(factor_graph, w)
+                        if length(neighbors(factor_graph, u)) == 1
+                            @test u ∈ neibs[v]
+                            @test u ∉ boundaries[v]
                         end
                     end
                 end
             end
-
             # messages, eins, ptensors, mars_eins, mars_tensors = GenericMessagePassing.tnbp_precompute(factor_graph, code, tensors, neibs, boundaries, GreedyMethod())
 
             # @testset "precompute" begin

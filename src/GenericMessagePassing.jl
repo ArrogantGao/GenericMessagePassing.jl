@@ -11,6 +11,7 @@ using Statistics, Suppressor
 using OMEinsum.OMEinsumContractionOrders: IncidenceList
 
 # exported types
+export FactorGraph
 export BPConfig, TNBPConfig
 
 # exported functions
