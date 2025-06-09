@@ -1,7 +1,7 @@
 module GenericMessagePassing
 
 # imported packages
-using Graphs
+using Graphs, LinearAlgebra
 using ProblemReductions, GenericTensorNetworks, OMEinsum
 using TensorInference
 
@@ -15,7 +15,8 @@ export FactorGraph
 export BPConfig, TNBPConfig
 
 # exported functions
-export marginal_bp, marginal_tnbp
+export bp, marginal_bp, entropy_bp
+export marginal_tnbp
 
 include("types.jl")
 include("generic.jl")
