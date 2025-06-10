@@ -161,7 +161,7 @@ function entropy_bp(code::AbstractEinsum, tensors::Vector{Array{TT}}, bp_config:
     for v in 1:length(tensors)
         t_ixs = [ixs[v]]
         for ei in hyper_graph.v2e[v]
-            push!(t_ixs, ixs[ei])
+            push!(t_ixs, [ei])
         end
 
         t_code = EinCode(t_ixs, Int[])

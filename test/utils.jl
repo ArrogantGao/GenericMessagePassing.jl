@@ -1,4 +1,5 @@
 using GenericMessagePassing
+using GenericTensorNetworks
 using Graphs, OMEinsum
 
 using Test
@@ -22,4 +23,12 @@ using GenericMessagePassing: FactorGraph, open_neighbors, open_boundaries, isola
     isolate_vertices!(fgt, [1, 2])
     @test isempty(neighbors(fgt, 1))
     @test isempty(neighbors(fgt, 2))
+end
+
+@testset "k-sat" begin
+    k_sat = random_k_sat(10, 3, 20)
+    tn = tn_model(k_sat)
+    count_tn = tn.code(tn.tensors...)[]
+    count_gtn = solve(k_sat, CountingMax())[].c
+    @test count_tn == count_gtn
 end

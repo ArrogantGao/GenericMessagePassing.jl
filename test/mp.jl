@@ -7,15 +7,6 @@ using Test
 using Random
 Random.seed!(1234)
 
-function tn_model(g::SimpleGraph, tensors)
-    ixs = [[i] for i in 1:nv(g)] ∪ [[e.src, e.dst] for e in edges(g)]
-    iy = Int[]
-    code = EinCode(ixs, iy)
-    tensors = vcat([[1.0, 1.0] for i in 1:nv(g)], tensors)
-    tn = TensorNetworkModel(1:nv(g), code, tensors)
-    return tn
-end
-
 @testset "marginal tree" begin
     tree_g = GenericMessagePassing.random_tree(30)
     tn = tn_model(tree_g, [rand(2, 2) for _ in 1:ne(tree_g)])

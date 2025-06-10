@@ -69,3 +69,55 @@ function isolate_pairs!(fg::FactorGraph, vs)
 end
 
 Graphs.a_star(fg::FactorGraph, s, d) = a_star(fg.g, s, d)
+
+function random_k_sat(n::Int, k::Int, m::Int)
+    variables_true = BoolVar{Int}[]
+    variables_false = BoolVar{Int}[]
+    for i in 1:n
+        push!(variables_true, BoolVar(i, true))
+        push!(variables_false, BoolVar(i, false))
+    end
+    clauses = CNFClause{Int}[]
+    for i in 1:m
+        clause = BoolVar{Int}[]
+        vars_ids = []
+        while length(vars_ids) < k
+            var_id = rand(1:n)
+            if var_id in vars_ids
+                continue
+            end
+            push!(vars_ids, var_id)
+        end
+        for var_id in vars_ids
+            rand() < 0.5 ? push!(clause, variables_true[var_id]) : push!(clause, variables_false[var_id])
+        end
+        push!(clauses, CNFClause(clause))
+    end
+    for i in 1:n
+        push!(clauses, CNFClause([variables_true[i], variables_false[i]]))
+    end
+    return Satisfiability(CNF(clauses))
+end
+
+# probability graph model
+function tn_model(g::SimpleGraph, tensors)
+    ixs = [[i] for i in 1:nv(g)] ∪ [[e.src, e.dst] for e in edges(g)]
+    iy = Int[]
+    code = EinCode(ixs, iy)
+    tensors = vcat([[1.0, 1.0] for i in 1:nv(g)], tensors)
+    tn = TensorNetworkModel(1:nv(g), code, tensors)
+    return tn
+end
+
+# satisfiability
+function tn_model(sat::Satisfiability)
+    tn = TensorNetworkModel(sat, -Inf)
+    code = OMEinsum.flatten(tn.code)
+    tensors = tn.tensors
+    for i in length(sat.symbols) + 1 : length(tensors)
+        tensor = tensors[i]
+        tensor .*= -1.0
+        tensor .+= 1.0
+    end
+    return TensorNetworkModel(1:length(sat.symbols), code, tensors)
+end

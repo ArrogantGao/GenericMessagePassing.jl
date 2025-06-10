@@ -15,6 +15,9 @@ export FactorGraph
 export BPConfig, TNBPConfig
 
 # exported functions
+export random_k_sat
+export tn_model
+
 export bp, marginal_bp, entropy_bp
 export marginal_tnbp
 
