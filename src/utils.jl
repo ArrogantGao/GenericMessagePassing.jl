@@ -121,3 +121,10 @@ function tn_model(sat::Satisfiability)
     end
     return TensorNetworkModel(1:length(sat.symbols), code, tensors)
 end
+
+# inference model
+function tn_model(problem::ArtifactProblemSpec; optimizer = TreeSA(sc_target = 20, ntrials = 1, niters = 5, βs = 0.1:0.1:100), evidence = Dict{Int, Int}())
+    model = read_model(problem)
+    tn = TensorNetworkModel(model; optimizer, evidence)
+    return tn
+end

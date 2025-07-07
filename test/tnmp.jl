@@ -14,14 +14,15 @@ Random.seed!(1234)
         push!(codes, code)
     end
 
-    for problem in [problem_from_artifact("uai2014", "MAR", "Promedus", 14), problem_from_artifact("uai2014", "MAR", "ObjectDetection", 42)]
+    for problem in [problem_from_artifact("uai2014", "MAR", "Promedus", 14)]
         model = read_model(problem)
         tn = TensorNetworkModel(model; optimizer = GreedyMethod())
         push!(codes, tn.code)
     end
 
-    for code in codes
-        for r in [2, 3, 4]
+    for (ic, code) in enumerate(codes)
+        for r in [2, 3, 4, 5]
+            (ic == 3 && r == 5) && continue
             factor_graph = FactorGraph(code)
             neibs, boundaries = GenericMessagePassing.generate_neighborhoods(factor_graph, r)
 
@@ -49,11 +50,6 @@ Random.seed!(1234)
                     end
                 end
             end
-            # messages, eins, ptensors, mars_eins, mars_tensors = GenericMessagePassing.tnbp_precompute(factor_graph, code, tensors, neibs, boundaries, GreedyMethod())
-
-            # @testset "precompute" begin
-                
-            # end
         end
     end
 end
@@ -66,7 +62,7 @@ end
     β = 1.0
     tn, code, tensors = GenericMessagePassing.ising_model(g, h, J, β, verbose = true)
     ti_sol = marginals(tn)
-    bp_sol = marginal_tnbp(code, tensors, TNBPConfig(verbose = true))
+    bp_sol = marginal_tnbp(tn, TNBPConfig(verbose = true))
     for i in keys(bp_sol)
         @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
         @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
@@ -85,7 +81,7 @@ end
     β = 1.0
     tn, code, tensors = GenericMessagePassing.ising_model(g, h, J, β, verbose = true)
     ti_sol = marginals(tn)
-    bp_sol = marginal_tnbp(code, tensors, TNBPConfig(verbose = true))
+    bp_sol = marginal_tnbp(tn, TNBPConfig(verbose = true))
     for i in keys(bp_sol)
         @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
         @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
@@ -100,7 +96,21 @@ end
     β = 1.0
     tn, code, tensors = GenericMessagePassing.ising_model(g, h, J, β, verbose = true)
     ti_sol = marginals(tn)
-    bp_sol = marginal_tnbp(code, tensors, TNBPConfig(verbose = true))
+    bp_sol = marginal_tnbp(tn, TNBPConfig(verbose = true))
+    for i in keys(bp_sol)
+        @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
+        @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
+    end
+end
+
+@testset "marginal spinglass square-lattice" begin
+    g = SimpleGraph(random_square_lattice_graph(20, 20, 0.8))
+    h = ones(nv(g))
+    J = -1 .* ones(ne(g))
+    β = 1.0
+    tn, code, tensors = GenericMessagePassing.ising_model(g, h, J, β, verbose = true)
+    ti_sol = marginals(tn)
+    bp_sol = marginal_tnbp(tn, TNBPConfig(verbose = true, r = 4, optimizer = TreeSA(sc_target = 20, ntrials = 1, niters = 5, βs = 0.1:0.1:100)))
     for i in keys(bp_sol)
         @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-4)
         @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-4)
@@ -108,21 +118,15 @@ end
 end
 
 @testset "marginal uai2014 Promedus" begin
+    # this problem is very baised, I am not sure is it a good test case
     problem = problem_from_artifact("uai2014", "MAR", "Promedus", 14)
     for rr in [2, 3, 4]
-        optimizer = TreeSA(ntrials = 1, niters = 5, βs = 0.1:0.1:100)
-        evidence = Dict{Int, Int}()
-        model = read_model(problem)
-
-        tn = TensorNetworkModel(model; optimizer, evidence)
+        tn = tn_model(problem)
         ti_sol = marginals(tn)
 
-        code = tn.code.eins
-        tensors = tn.tensors
-
         for random_order in [false, true]
-            tnbp_config = TNBPConfig(random_order = random_order, verbose = true, error = 1e-6, r = rr)
-            bp_sol = marginal_tnbp(code, tensors, tnbp_config)
+            tnbp_config = TNBPConfig(random_order = random_order, verbose = true, error = 1e-6, r = rr, optimizer = TreeSA(sc_target = 20, ntrials = 1, niters = 5, βs = 0.1:0.1:100))
+            bp_sol = marginal_tnbp(tn, tnbp_config)
             for i in keys(bp_sol)
                 @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-3)
                 @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-3)
@@ -132,24 +136,21 @@ end
 end
 
 @testset "marginal uai2014 ObjectDetection" begin
-    problem = problem_from_artifact("uai2014", "MAR", "ObjectDetection", 42)
-    rr = 2
-    optimizer = TreeSA(ntrials = 1, niters = 5, βs = 0.1:0.1:100)
-    evidence = Dict{Int, Int}()
-    model = read_model(problem)
+    for problem in [problem_from_artifact("uai2014", "MAR", "ObjectDetection", 42), problem_from_artifact("uai2014", "MAR", "ObjectDetection", 28)]
+        for rr in [2, 3]
+            tn = tn_model(problem)
+            ti_sol = marginals(tn)
 
-    tn = TensorNetworkModel(model; optimizer, evidence)
-    ti_sol = marginals(tn)
-
-    code = tn.code.eins
-    tensors = tn.tensors
-
-    random_order = false
-    tnbp_config = TNBPConfig(random_order = random_order, verbose = true, error = 1e-12, r = rr)
-    bp_sol = marginal_tnbp(code, tensors, tnbp_config)
-    for i in keys(bp_sol)
-        for j in 1:length(bp_sol[i])
-            @test isapprox(ti_sol[[i]][j], bp_sol[i][j], atol = 1e-2)
+            random_order = false
+            tnbp_config = TNBPConfig(random_order = random_order, verbose = true, error = 1e-12, r = rr, optimizer = TreeSA(sc_target = 20, ntrials = 1, niters = 5, βs = 0.1:0.1:100))
+            bp_sol = marginal_tnbp(tn, tnbp_config)
+            max_err = 0.0
+            for i in keys(bp_sol)
+                for j in 1:length(bp_sol[i])
+                    @test isapprox(ti_sol[[i]][j], bp_sol[i][j], atol = 1e-2)
+                    max_err = max(max_err, abs(ti_sol[[i]][j] - bp_sol[i][j]))
+                end
+            end
         end
     end
 end

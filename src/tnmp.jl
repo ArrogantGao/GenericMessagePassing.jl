@@ -197,6 +197,12 @@ function tnbp_update!(messages::Dict{Tuple{Int, Int}, TA}, eins::Dict{Tuple{Int,
     return error_max
 end
 
+function marginal_tnbp(tn::TensorNetworkModel, tnbp_config::TNBPConfig)
+    code = tn.code isa SlicedEinsum ? tn.code.eins : tn.code
+    tensors = tn.tensors
+    return marginal_tnbp(code, tensors, tnbp_config)
+end
+
 function marginal_tnbp(code::AbstractEinsum, tensors::Vector{TA}, tnbp_config::TNBPConfig) where {TA <: AbstractArray}
     
     icode, idict = intcode(code)

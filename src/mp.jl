@@ -99,6 +99,12 @@ function bp_update!(hyper_graph::IncidenceList, tensors::Vector{Array{TT}}, ixs:
     return error_max_e2v
 end
 
+function marginal_bp(tn::TensorNetworkModel, bp_config::BPConfig)
+    code = tn.code isa SlicedEinsum ? tn.code.eins : tn.code
+    tensors = tn.tensors
+    return marginal_bp(code, tensors, bp_config)
+end
+
 # use the bp message to compute the marginal distribution
 function marginal_bp(code::AbstractEinsum, tensors::Vector{Array{TT}}, bp_config::BPConfig) where {TT<:Number}
     icode, idict = intcode(code)
