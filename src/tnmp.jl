@@ -26,6 +26,7 @@ function generate_neighborhoods(fg::FactorGraph{T}, r::Int) where T
                 boundary = open_boundaries(fg, neib)
                 for v in boundary
                     v ∈ safe_vertices && continue
+                    # this process will include the rank-1 tensors into the neighborhood, since no message is sent to them
                     for w in neighbors(fg, v)
                         if length(neighbors(fg, w)) == 1
                             push!(neib, w)
@@ -91,9 +92,9 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
 
         # check the eins of the messages, generate the message tensors
         for w in boundary_v
-            # message from w to neighborhood of v
+            # the message[(w, v)]: -- M_(w, v) -- w -- Rv
             if is_factor(fg, w)
-                local_iy = [u for u in neighbors(fg, w) if u ∈ neib_v]
+                local_iy = [u for u in neighbors(fg, w) if u ∉ neib_v]
             else
                 local_iy = [w]
             end
@@ -108,11 +109,9 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
         boundary_v = boundaries[v]
 
         for w in boundary_v
-            # neib_w / neib_v
-            core_v = setdiff(neib_v, boundary_v)
             neib_w = neibs[w]
             boundary_w = boundaries[w]
-            local_region = setdiff(neib_w, core_v)
+            local_region = setdiff(neib_w, neib_v)
 
             local_tensors = Vector{AbstractArray}()
             local_ixs = Vector{Vector{Int}}()
@@ -121,28 +120,26 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
             boundary_without_message = setdiff(open_boundaries(fg, local_region), boundary_with_message)
 
             for b in local_region
-                if b == w
-                    if is_factor(fg, b)
-                        push!(local_ixs, ixs[b - fg.num_vars])
-                        push!(local_tensors, tensors[b - fg.num_vars])
-                    end
-                elseif b ∈ boundary_with_message
+                @assert b != w # w is part of the boundary of v, it is removed from the local region
+
+                # include the tensor from b if b is a factor
+                if is_factor(fg, b)
+                    push!(local_ixs, ixs[b - fg.num_vars])
+                    push!(local_tensors, tensors[b - fg.num_vars])
+                end
+
+                if b ∈ boundary_with_message # include the message from b to w
                     push!(local_ixs, local_iys[(b, w)])
                     push!(local_tensors, messages[(b, w)])
-                elseif b ∈ boundary_without_message
+                elseif b ∈ boundary_without_message # set a uniform dummy tensor, equivalent to trace those indices
                     if is_factor(fg, b)
-                        local_ix = [u for u in neighbors(fg, b) if u ∈ local_region]
+                        dummy_ix = [u for u in neighbors(fg, b) if u ∉ local_region]
                     else
-                        local_ix = [b]
+                        dummy_ix = [b]
                     end
-                    t = ones(TT, [size_dict[x] for x in local_ix]...)
-                    push!(local_ixs, local_ix)
-                    push!(local_tensors, t ./ sum(t))
-                else
-                    if is_factor(fg, b)
-                        push!(local_ixs, ixs[b - fg.num_vars])
-                        push!(local_tensors, tensors[b - fg.num_vars])
-                    end
+
+                    push!(local_ixs, dummy_ix)
+                    push!(local_tensors, ones(TT, [size_dict[x] for x in dummy_ix]...))
                 end
             end
 
@@ -161,14 +158,13 @@ function tnbp_precompute(fg::FactorGraph, icode::TE, tensors::Vector{TA}, neibs:
         local_iy = [v]
         local_tensors = Vector{AbstractArray}()
         for w in neibs[v]
-            if w ∈ boundaries[v]
+            if w ∈ boundaries[v] # include the message from w to v
                 push!(local_ixs, local_iys[(w, v)])
                 push!(local_tensors, messages[(w, v)])
-            else
-                if is_factor(fg, w)
-                    push!(local_ixs, ixs[w - fg.num_vars])
-                    push!(local_tensors, tensors[w - fg.num_vars])
-                end
+            end
+            if is_factor(fg, w) # include the tensor from w if w is a factor
+                push!(local_ixs, ixs[w - fg.num_vars])
+                push!(local_tensors, tensors[w - fg.num_vars])
             end
         end
         eincode = EinCode(local_ixs, local_iy)

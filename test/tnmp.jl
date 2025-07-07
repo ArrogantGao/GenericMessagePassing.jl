@@ -107,8 +107,33 @@ end
     end
 end
 
-@testset "marginal uai2014" begin
+@testset "marginal uai2014 Promedus" begin
     problem = problem_from_artifact("uai2014", "MAR", "Promedus", 14)
+    for rr in [2, 3, 4]
+        optimizer = TreeSA(ntrials = 1, niters = 5, βs = 0.1:0.1:100)
+        evidence = Dict{Int, Int}()
+        model = read_model(problem)
+
+        tn = TensorNetworkModel(model; optimizer, evidence)
+        ti_sol = marginals(tn)
+
+        code = tn.code.eins
+        tensors = tn.tensors
+
+        for random_order in [false, true]
+            tnbp_config = TNBPConfig(random_order = random_order, verbose = true, error = 1e-6, r = rr)
+            bp_sol = marginal_tnbp(code, tensors, tnbp_config)
+            for i in keys(bp_sol)
+                @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-3)
+                @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-3)
+            end
+        end
+    end
+end
+
+@testset "marginal uai2014 ObjectDetection" begin
+    problem = problem_from_artifact("uai2014", "MAR", "ObjectDetection", 42)
+    rr = 2
     optimizer = TreeSA(ntrials = 1, niters = 5, βs = 0.1:0.1:100)
     evidence = Dict{Int, Int}()
     model = read_model(problem)
@@ -119,14 +144,12 @@ end
     code = tn.code.eins
     tensors = tn.tensors
 
-    for random_order in [false]
-        tnbp_config = TNBPConfig(random_order = random_order, verbose = true, error = 1e-12, r = 2)
-        bp_sol = marginal_tnbp(code, tensors, tnbp_config)
-        for i in keys(bp_sol)
-            @test isapprox(ti_sol[[i]][1], bp_sol[i][1], atol = 1e-3)
-            @test isapprox(ti_sol[[i]][2], bp_sol[i][2], atol = 1e-3)
+    random_order = false
+    tnbp_config = TNBPConfig(random_order = random_order, verbose = true, error = 1e-12, r = rr)
+    bp_sol = marginal_tnbp(code, tensors, tnbp_config)
+    for i in keys(bp_sol)
+        for j in 1:length(bp_sol[i])
+            @test isapprox(ti_sol[[i]][j], bp_sol[i][j], atol = 1e-2)
         end
     end
-
-    # problem_from_artifact("uai2014", "MAR", "ObjectDetection", 42)
 end
