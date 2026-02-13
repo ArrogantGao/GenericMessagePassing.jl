@@ -7,6 +7,29 @@ using Test
 using Random
 Random.seed!(1234)
 
+@testset "bp precompute plans" begin
+    g = random_regular_graph(12, 3)
+    h = ones(nv(g))
+    J = ones(ne(g))
+    β = 1.0
+    _, code, tensors = GenericMessagePassing.ising_model(g, h, J, β, verbose = false)
+
+    icode, _ = GenericMessagePassing.intcode(code)
+    ixs = getixsv(icode)
+    iy = getiyv(icode)
+    ids = uniquelabels(icode)
+    size_dict = OMEinsum.get_size_dict(ixs, tensors)
+    hyper_graph = GenericMessagePassing.IncidenceList(Dict([i => ix for (i, ix) in enumerate(ixs)]), openedges = iy)
+
+    e2v_plans, v2e_plans = GenericMessagePassing.bp_precompute_plans(hyper_graph, ixs, ids, size_dict)
+    @test length(e2v_plans) == sum(length.(values(hyper_graph.e2v)))
+    @test length(v2e_plans) == sum(length.(values(hyper_graph.e2v)))
+    for e in ids, v in hyper_graph.e2v[e]
+        @test haskey(e2v_plans, (e, v))
+        @test haskey(v2e_plans, (v, e))
+    end
+end
+
 @testset "marginal tree" begin
     tree_g = GenericMessagePassing.random_tree(30)
     tn = tn_model(tree_g, [rand(2, 2) for _ in 1:ne(tree_g)])

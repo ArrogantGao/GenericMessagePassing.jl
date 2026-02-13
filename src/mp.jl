@@ -1,6 +1,56 @@
 # given a tensor network, solve the message via bp
 # notice that this is pure bp, did not use tn for update
 
+function bp_precompute_plans(
+    hyper_graph::IncidenceList,
+    ixs::Vector{Vector{Int}},
+    ids::Vector{Int},
+    size_dict::Dict{Int, Int};
+    optimizer::CodeOptimizer = GreedyMethod(),
+)
+    e2v_plans = Dict{Tuple{Int, Int}, NamedTuple{(:eins, :arg_keys), Tuple{AbstractEinsum, Vector{Tuple{Int, Int}}}}}()
+    v2e_plans = Dict{Tuple{Int, Int}, NamedTuple{(:eins, :tensor_v, :msg_keys), Tuple{AbstractEinsum, Int, Vector{Tuple{Int, Int}}}}}()
+
+    for e in ids, v in hyper_graph.e2v[e]
+        local_ixs = Vector{Vector{Int}}()
+        arg_keys = Tuple{Int, Int}[]
+
+        for vp in hyper_graph.e2v[e]
+            if vp != v
+                push!(local_ixs, ixs[vp])
+                push!(arg_keys, (vp, 0))
+                for ep in hyper_graph.v2e[vp]
+                    if ep != e
+                        push!(local_ixs, [ep])
+                        push!(arg_keys, (ep, vp))
+                    end
+                end
+            end
+        end
+
+        rawcode = EinCode(local_ixs, [e])
+        e2v_plans[(e, v)] = (eins = optimize_code(rawcode, size_dict, optimizer), arg_keys = arg_keys)
+    end
+
+    for e in ids, v in hyper_graph.e2v[e]
+        local_ixs = Vector{Vector{Int}}()
+        msg_keys = Tuple{Int, Int}[]
+
+        push!(local_ixs, ixs[v])
+        for n in hyper_graph.v2e[v]
+            if n != e
+                push!(local_ixs, [n])
+                push!(msg_keys, (n, v))
+            end
+        end
+
+        rawcode = EinCode(local_ixs, [e])
+        v2e_plans[(v, e)] = (eins = optimize_code(rawcode, size_dict, optimizer), tensor_v = v, msg_keys = msg_keys)
+    end
+
+    return e2v_plans, v2e_plans
+end
+
 # return the normalized messages
 function bp(hyper_graph::IncidenceList, ixs::Vector{Vector{Int}}, iy::Vector{Int}, ids::Vector{Int}, size_dict::Dict{Int, Int}, tensors::Vector{Array{TT}}, bp_config::BPConfig) where {TT<:Number}
     # initialize messages
@@ -14,10 +64,11 @@ function bp(hyper_graph::IncidenceList, ixs::Vector{Vector{Int}}, iy::Vector{Int
             normalize!(messages_e2v[(e, v)])
         end
     end
+    e2v_plans, v2e_plans = bp_precompute_plans(hyper_graph, ixs, ids, size_dict)
 
     # bp
     for i in 1:bp_config.max_iter
-        error_max_e2v = bp_update!(hyper_graph, tensors, ixs, size_dict, messages_e2v, bp_config)
+        error_max_e2v = bp_update!(tensors, messages_e2v, e2v_plans, bp_config)
         bp_config.verbose && println("iter $i: error_max_e2v = $error_max_e2v")
         error_max_e2v < bp_config.error && break
     end
@@ -25,65 +76,37 @@ function bp(hyper_graph::IncidenceList, ixs::Vector{Vector{Int}}, iy::Vector{Int
     # 1. from tensors to indices: messages_v2e
     messages_v2e = Dict{Tuple{Int, Int}, Vector{TT}}()
     # update messages_v2e according to the updated messages_e2v
-    for e in ids, v in hyper_graph.e2v[e]
-        local_tensors = Vector{Array{TT}}()
-        local_ixs = Vector{Vector{Int}}()
-        local_iy = [e]
-        
-        push!(local_tensors, tensors[v])
-        push!(local_ixs, ixs[v])
-
-        for n in hyper_graph.v2e[v]
-            if n != e
-                push!(local_tensors, messages_e2v[(n, v)])
-                push!(local_ixs, [n])
-            end
+    for key in keys(v2e_plans)
+        plan = v2e_plans[key]
+        local_tensors = Vector{AbstractArray{TT}}(undef, length(plan.msg_keys) + 1)
+        local_tensors[1] = tensors[plan.tensor_v]
+        for (i, msg_key) in enumerate(plan.msg_keys)
+            local_tensors[i + 1] = messages_e2v[msg_key]
         end
-
-        # contract the local tensors
-        rawcode = EinCode(local_ixs, local_iy)
-        nested_code = optimize_code(rawcode, size_dict, GreedyMethod())
-        t = nested_code(local_tensors...)
-
-        # normalize
-        messages_v2e[(v, e)] = normalize!(t)
+        messages_v2e[key] = normalize!(plan.eins(local_tensors...))
     end
 
     return messages_e2v, messages_v2e
 end
 
-function bp_update!(hyper_graph::IncidenceList, tensors::Vector{Array{TT}}, ixs::Vector{Vector{Int}}, size_dict::Dict{Int, Int}, messages_e2v::Dict{Tuple{Int, Int}, Vector{TT}}, bp_config::BPConfig) where {TT<:Number}
+function bp_update!(tensors::Vector{Array{TT}}, messages_e2v::Dict{Tuple{Int, Int}, Vector{TT}}, e2v_plans::Dict{Tuple{Int, Int}, NamedTuple{(:eins, :arg_keys), Tuple{AbstractEinsum, Vector{Tuple{Int, Int}}}}}, bp_config::BPConfig) where {TT<:Number}
     t = collect(keys(messages_e2v))
     order = bp_config.random_order ? t[sortperm(rand(length(t)))] : t
 
     error_max_e2v = 0.0
 
     for (e, v) in order
-        # update messages_e2v
-        local_tensors = Vector{AbstractArray{TT}}()
-        local_ixs = Vector{Vector{Int}}()
-        local_iy = [e]
-        
-        for vp in hyper_graph.e2v[e]
-            if vp != v
-                # inlcude the other tensor connected to e
-                push!(local_tensors, tensors[vp])
-                push!(local_ixs, ixs[vp])
-
-                # include the message from vp to e
-                for ep in hyper_graph.v2e[vp]
-                    if ep != e
-                        push!(local_ixs, [ep])
-                        push!(local_tensors, messages_e2v[(ep, vp)])
-                    end
-                end
+        plan = e2v_plans[(e, v)]
+        local_tensors = Vector{AbstractArray{TT}}(undef, length(plan.arg_keys))
+        for (i, key) in enumerate(plan.arg_keys)
+            if key[2] == 0
+                local_tensors[i] = tensors[key[1]]
+            else
+                local_tensors[i] = messages_e2v[key]
             end
         end
 
-        # contract the local tensors
-        rawcode = EinCode(local_ixs, local_iy)
-        nested_code = optimize_code(rawcode, size_dict, GreedyMethod())
-        t = nested_code(local_tensors...)
+        t = plan.eins(local_tensors...)
         normalize!(t)
 
         # update error
